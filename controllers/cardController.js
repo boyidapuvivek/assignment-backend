@@ -1,12 +1,24 @@
 const User = require("../models/User")
 const Joi = require("joi")
 const { deleteFromCloudinary } = require("../config/cloudinary")
+const crypto = require("crypto")
 
-// Validation schema for creating team/business cards
+// Function to generate a random password
+const generateRandomPassword = (length = 12) => {
+  const charset =
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
+  let password = ""
+  for (let i = 0; i < length; i++) {
+    password += charset.charAt(Math.floor(Math.random() * charset.length))
+  }
+  return password
+}
+
+// Validation schema for creating team/business cards (password is now optional)
 const createCardSchema = Joi.object({
   username: Joi.string().min(3).max(30).required(),
   email: Joi.string().email().required(),
-  password: Joi.string().min(6).required(),
+  password: Joi.string().min(6).optional(), // Made optional since it will be auto-generated
   cardType: Joi.string().valid("team", "business").required(),
   phoneNumber: Joi.string().allow(""),
   businessEmail: Joi.string().email().allow(""),
@@ -68,6 +80,11 @@ const getBusinessCards = async (req, res) => {
 // Create team card
 const createTeamCard = async (req, res) => {
   try {
+    // Auto-generate password if not provided
+    if (!req.body.password) {
+      req.body.password = generateRandomPassword()
+    }
+
     // Validate input
     const { error } = createCardSchema.validate({
       ...req.body,
@@ -150,6 +167,7 @@ const createTeamCard = async (req, res) => {
       coverImage: teamMember.coverImage,
       userType: teamMember.userType,
       createdAt: teamMember.createdAt,
+      generatedPassword: password, // Include generated password in response for reference
     }
 
     res.status(201).json({
@@ -165,6 +183,11 @@ const createTeamCard = async (req, res) => {
 // Create business card
 const createBusinessCard = async (req, res) => {
   try {
+    // Auto-generate password if not provided
+    if (!req.body.password) {
+      req.body.password = generateRandomPassword()
+    }
+
     // Validate input
     const { error } = createCardSchema.validate({
       ...req.body,
@@ -247,6 +270,7 @@ const createBusinessCard = async (req, res) => {
       coverImage: businessUser.coverImage,
       userType: businessUser.userType,
       createdAt: businessUser.createdAt,
+      generatedPassword: password, // Include generated password in response for reference
     }
 
     res.status(201).json({
@@ -270,6 +294,7 @@ const updateTeamCard = async (req, res) => {
       ownerId: req.user.id,
       userType: "team",
     })
+
     if (!card) {
       return res.status(404).json({ message: "Team card not found" })
     }
@@ -335,6 +360,7 @@ const updateBusinessCard = async (req, res) => {
       ownerId: req.user.id,
       userType: "business",
     })
+
     if (!card) {
       return res.status(404).json({ message: "Business card not found" })
     }
@@ -393,6 +419,7 @@ const updateBusinessCard = async (req, res) => {
 const deleteTeamCard = async (req, res) => {
   try {
     const { id } = req.params
+
     const card = await User.findOne({
       _id: id,
       ownerId: req.user.id,
@@ -407,6 +434,7 @@ const deleteTeamCard = async (req, res) => {
     if (card.avatar.public_id) {
       await deleteFromCloudinary(card.avatar.public_id)
     }
+
     if (card.coverImage.public_id) {
       await deleteFromCloudinary(card.coverImage.public_id)
     }
@@ -425,6 +453,7 @@ const deleteTeamCard = async (req, res) => {
 const deleteBusinessCard = async (req, res) => {
   try {
     const { id } = req.params
+
     const card = await User.findOne({
       _id: id,
       ownerId: req.user.id,
@@ -439,6 +468,7 @@ const deleteBusinessCard = async (req, res) => {
     if (card.avatar.public_id) {
       await deleteFromCloudinary(card.avatar.public_id)
     }
+
     if (card.coverImage.public_id) {
       await deleteFromCloudinary(card.coverImage.public_id)
     }
