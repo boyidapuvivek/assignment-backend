@@ -1,5 +1,6 @@
 const User = require("../models/User")
 const Joi = require("joi")
+const { deleteFromCloudinary } = require("../config/cloudinary")
 
 // Validation schema for creating team/business cards
 const createCardSchema = Joi.object({
@@ -7,6 +8,16 @@ const createCardSchema = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string().min(6).required(),
   cardType: Joi.string().valid("team", "business").required(),
+  phoneNumber: Joi.string().allow(""),
+  businessEmail: Joi.string().email().allow(""),
+  businessNumber: Joi.string().allow(""),
+  businessDescription: Joi.string().max(200).allow(""),
+  location: Joi.string().allow(""),
+  businessName: Joi.string().allow(""),
+})
+
+// Validation schema for updating cards
+const updateCardSchema = Joi.object({
   phoneNumber: Joi.string().allow(""),
   businessEmail: Joi.string().email().allow(""),
   businessNumber: Joi.string().allow(""),
@@ -33,7 +44,6 @@ const getTeamCards = async (req, res) => {
       ownerId: req.user.id,
       userType: "team",
     }).select("-password")
-
     res.json(teamCards)
   } catch (error) {
     console.error("Get team cards error:", error)
@@ -48,7 +58,6 @@ const getBusinessCards = async (req, res) => {
       ownerId: req.user.id,
       userType: "business",
     }).select("-password")
-
     res.json(businessCards)
   } catch (error) {
     console.error("Get business cards error:", error)
@@ -84,15 +93,14 @@ const createTeamCard = async (req, res) => {
     const existingUser = await User.findOne({
       $or: [{ email }, { username }],
     })
-
     if (existingUser) {
       return res.status(400).json({
         message: "User already exists with this email or username",
       })
     }
 
-    // Create team member
-    const teamMember = new User({
+    // Prepare team member data
+    const teamMemberData = {
       username,
       email,
       password,
@@ -105,25 +113,48 @@ const createTeamCard = async (req, res) => {
       ownerId: req.user.id,
       userType: "team",
       isProfileComplete: true,
-    })
+    }
 
+    // Handle avatar upload
+    if (req.files && req.files.avatar) {
+      teamMemberData.avatar = {
+        url: req.files.avatar[0].path,
+        public_id: req.files.avatar[0].filename,
+      }
+    }
+
+    // Handle cover image upload
+    if (req.files && req.files.coverImage) {
+      teamMemberData.coverImage = {
+        url: req.files.coverImage[0].path,
+        public_id: req.files.coverImage[0].filename,
+      }
+    }
+
+    // Create team member
+    const teamMember = new User(teamMemberData)
     await teamMember.save()
+
+    // Return response without password
+    const responseData = {
+      id: teamMember._id,
+      username: teamMember.username,
+      email: teamMember.email,
+      phoneNumber: teamMember.phoneNumber,
+      businessEmail: teamMember.businessEmail,
+      businessNumber: teamMember.businessNumber,
+      businessDescription: teamMember.businessDescription,
+      location: teamMember.location,
+      businessName: teamMember.businessName,
+      avatar: teamMember.avatar,
+      coverImage: teamMember.coverImage,
+      userType: teamMember.userType,
+      createdAt: teamMember.createdAt,
+    }
 
     res.status(201).json({
       message: "Team member created successfully",
-      teamMember: {
-        id: teamMember._id,
-        username: teamMember.username,
-        email: teamMember.email,
-        phoneNumber: teamMember.phoneNumber,
-        businessEmail: teamMember.businessEmail,
-        businessNumber: teamMember.businessNumber,
-        businessDescription: teamMember.businessDescription,
-        location: teamMember.location,
-        businessName: teamMember.businessName,
-        userType: teamMember.userType,
-        createdAt: teamMember.createdAt,
-      },
+      teamMember: responseData,
     })
   } catch (error) {
     console.error("Create team card error:", error)
@@ -159,15 +190,14 @@ const createBusinessCard = async (req, res) => {
     const existingUser = await User.findOne({
       $or: [{ email }, { username }],
     })
-
     if (existingUser) {
       return res.status(400).json({
         message: "User already exists with this email or username",
       })
     }
 
-    // Create business user
-    const businessUser = new User({
+    // Prepare business user data
+    const businessUserData = {
       username,
       email,
       password,
@@ -180,25 +210,48 @@ const createBusinessCard = async (req, res) => {
       ownerId: req.user.id,
       userType: "business",
       isProfileComplete: true,
-    })
+    }
 
+    // Handle avatar upload
+    if (req.files && req.files.avatar) {
+      businessUserData.avatar = {
+        url: req.files.avatar[0].path,
+        public_id: req.files.avatar[0].filename,
+      }
+    }
+
+    // Handle cover image upload
+    if (req.files && req.files.coverImage) {
+      businessUserData.coverImage = {
+        url: req.files.coverImage[0].path,
+        public_id: req.files.coverImage[0].filename,
+      }
+    }
+
+    // Create business user
+    const businessUser = new User(businessUserData)
     await businessUser.save()
+
+    // Return response without password
+    const responseData = {
+      id: businessUser._id,
+      username: businessUser.username,
+      email: businessUser.email,
+      phoneNumber: businessUser.phoneNumber,
+      businessEmail: businessUser.businessEmail,
+      businessNumber: businessUser.businessNumber,
+      businessDescription: businessUser.businessDescription,
+      location: businessUser.location,
+      businessName: businessUser.businessName,
+      avatar: businessUser.avatar,
+      coverImage: businessUser.coverImage,
+      userType: businessUser.userType,
+      createdAt: businessUser.createdAt,
+    }
 
     res.status(201).json({
       message: "Business card created successfully",
-      businessCard: {
-        id: businessUser._id,
-        username: businessUser.username,
-        email: businessUser.email,
-        phoneNumber: businessUser.phoneNumber,
-        businessEmail: businessUser.businessEmail,
-        businessNumber: businessUser.businessNumber,
-        businessDescription: businessUser.businessDescription,
-        location: businessUser.location,
-        businessName: businessUser.businessName,
-        userType: businessUser.userType,
-        createdAt: businessUser.createdAt,
-      },
+      businessCard: responseData,
     })
   } catch (error) {
     console.error("Create business card error:", error)
@@ -217,22 +270,49 @@ const updateTeamCard = async (req, res) => {
       ownerId: req.user.id,
       userType: "team",
     })
-
     if (!card) {
       return res.status(404).json({ message: "Team card not found" })
     }
 
     // Validate input
-    const { error } = updateProfileSchema.validate(req.body)
+    const { error } = updateCardSchema.validate(req.body)
     if (error) {
       return res.status(400).json({ message: error.details[0].message })
     }
 
-    const updatedCard = await User.findByIdAndUpdate(
-      id,
-      { ...req.body, isProfileComplete: true },
-      { new: true, runValidators: true }
-    ).select("-password")
+    // Prepare update data
+    const updateData = { ...req.body, isProfileComplete: true }
+
+    // Handle avatar upload
+    if (req.files && req.files.avatar) {
+      // Delete old avatar if exists
+      if (card.avatar.public_id) {
+        await deleteFromCloudinary(card.avatar.public_id)
+      }
+
+      updateData.avatar = {
+        url: req.files.avatar[0].path,
+        public_id: req.files.avatar[0].filename,
+      }
+    }
+
+    // Handle cover image upload
+    if (req.files && req.files.coverImage) {
+      // Delete old cover image if exists
+      if (card.coverImage.public_id) {
+        await deleteFromCloudinary(card.coverImage.public_id)
+      }
+
+      updateData.coverImage = {
+        url: req.files.coverImage[0].path,
+        public_id: req.files.coverImage[0].filename,
+      }
+    }
+
+    const updatedCard = await User.findByIdAndUpdate(id, updateData, {
+      new: true,
+      runValidators: true,
+    }).select("-password")
 
     res.json({
       message: "Team card updated successfully",
@@ -255,22 +335,49 @@ const updateBusinessCard = async (req, res) => {
       ownerId: req.user.id,
       userType: "business",
     })
-
     if (!card) {
       return res.status(404).json({ message: "Business card not found" })
     }
 
     // Validate input
-    const { error } = updateProfileSchema.validate(req.body)
+    const { error } = updateCardSchema.validate(req.body)
     if (error) {
       return res.status(400).json({ message: error.details[0].message })
     }
 
-    const updatedCard = await User.findByIdAndUpdate(
-      id,
-      { ...req.body, isProfileComplete: true },
-      { new: true, runValidators: true }
-    ).select("-password")
+    // Prepare update data
+    const updateData = { ...req.body, isProfileComplete: true }
+
+    // Handle avatar upload
+    if (req.files && req.files.avatar) {
+      // Delete old avatar if exists
+      if (card.avatar.public_id) {
+        await deleteFromCloudinary(card.avatar.public_id)
+      }
+
+      updateData.avatar = {
+        url: req.files.avatar[0].path,
+        public_id: req.files.avatar[0].filename,
+      }
+    }
+
+    // Handle cover image upload
+    if (req.files && req.files.coverImage) {
+      // Delete old cover image if exists
+      if (card.coverImage.public_id) {
+        await deleteFromCloudinary(card.coverImage.public_id)
+      }
+
+      updateData.coverImage = {
+        url: req.files.coverImage[0].path,
+        public_id: req.files.coverImage[0].filename,
+      }
+    }
+
+    const updatedCard = await User.findByIdAndUpdate(id, updateData, {
+      new: true,
+      runValidators: true,
+    }).select("-password")
 
     res.json({
       message: "Business card updated successfully",
@@ -286,8 +393,7 @@ const updateBusinessCard = async (req, res) => {
 const deleteTeamCard = async (req, res) => {
   try {
     const { id } = req.params
-
-    const card = await User.findOneAndDelete({
+    const card = await User.findOne({
       _id: id,
       ownerId: req.user.id,
       userType: "team",
@@ -296,6 +402,17 @@ const deleteTeamCard = async (req, res) => {
     if (!card) {
       return res.status(404).json({ message: "Team card not found" })
     }
+
+    // Delete images from Cloudinary
+    if (card.avatar.public_id) {
+      await deleteFromCloudinary(card.avatar.public_id)
+    }
+    if (card.coverImage.public_id) {
+      await deleteFromCloudinary(card.coverImage.public_id)
+    }
+
+    // Delete the card
+    await User.findByIdAndDelete(id)
 
     res.json({ message: "Team card deleted successfully" })
   } catch (error) {
@@ -308,8 +425,7 @@ const deleteTeamCard = async (req, res) => {
 const deleteBusinessCard = async (req, res) => {
   try {
     const { id } = req.params
-
-    const card = await User.findOneAndDelete({
+    const card = await User.findOne({
       _id: id,
       ownerId: req.user.id,
       userType: "business",
@@ -318,6 +434,17 @@ const deleteBusinessCard = async (req, res) => {
     if (!card) {
       return res.status(404).json({ message: "Business card not found" })
     }
+
+    // Delete images from Cloudinary
+    if (card.avatar.public_id) {
+      await deleteFromCloudinary(card.avatar.public_id)
+    }
+    if (card.coverImage.public_id) {
+      await deleteFromCloudinary(card.coverImage.public_id)
+    }
+
+    // Delete the card
+    await User.findByIdAndDelete(id)
 
     res.json({ message: "Business card deleted successfully" })
   } catch (error) {

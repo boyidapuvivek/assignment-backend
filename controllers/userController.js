@@ -1,5 +1,6 @@
 const User = require("../models/User")
 const Joi = require("joi")
+const { deleteFromCloudinary } = require("../config/cloudinary")
 
 // Validation schema for profile update
 const updateProfileSchema = Joi.object({
@@ -40,17 +41,14 @@ const updateProfile = async (req, res) => {
       businessName,
     } = req.body
 
-    console.log(
-      phoneNumber,
-      businessEmail,
-      businessNumber,
-      businessDescription,
-      location,
-      businessName
-    )
+    // Get current user to access old images
+    const currentUser = await User.findById(req.user.id)
+    if (!currentUser) {
+      return res.status(404).json({ message: "User not found" })
+    }
 
-    // Update user
-    const user = await User.findByIdAndUpdate(req.user.id, {
+    // Prepare update object
+    const updateData = {
       phoneNumber,
       businessEmail,
       businessNumber,
@@ -58,6 +56,39 @@ const updateProfile = async (req, res) => {
       location,
       businessName,
       isProfileComplete: true,
+    }
+
+    // Handle avatar upload
+    if (req.files && req.files.avatar) {
+      // Delete old avatar if exists
+      if (currentUser.avatar.public_id) {
+        await deleteFromCloudinary(currentUser.avatar.public_id)
+      }
+
+      updateData.avatar = {
+        url: req.files.avatar[0].path,
+        public_id: req.files.avatar[0].filename,
+      }
+    }
+
+    // Handle cover image upload
+    if (req.files && req.files.coverImage) {
+      // Delete old cover image if exists
+      if (currentUser.coverImage.public_id) {
+        await deleteFromCloudinary(currentUser.coverImage.public_id)
+      }
+
+      updateData.coverImage = {
+        url: req.files.coverImage[0].path,
+        public_id: req.files.coverImage[0].filename,
+      }
+    }
+
+    console.log("Update data:", updateData)
+
+    // Update user
+    const user = await User.findByIdAndUpdate(req.user.id, updateData, {
+      new: true,
     }).select("-password")
 
     res.json({
