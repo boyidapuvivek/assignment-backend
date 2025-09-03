@@ -14,6 +14,11 @@ const loginSchema = Joi.object({
   password: Joi.string().required(),
 })
 
+const forgotPasswordSchema = Joi.object({
+  email: Joi.string().email().required(),
+  newPassword: Joi.string().min(6).required(),
+})
+
 // Generate JWT token
 const generateToken = (userId) => {
   return jwt.sign({ userId }, process.env.JWT_SECRET, {
@@ -36,7 +41,6 @@ const register = async (req, res) => {
     const existingUser = await User.findOne({
       $or: [{ email }, { username }],
     })
-
     if (existingUser) {
       return res.status(400).json({
         message: "User already exists with this email or username",
@@ -50,7 +54,6 @@ const register = async (req, res) => {
       password,
       userType: "owner",
     })
-
     await user.save()
 
     // Generate token
@@ -122,7 +125,40 @@ const login = async (req, res) => {
   }
 }
 
+// Forgot password
+const forgotPassword = async (req, res) => {
+  try {
+    // Validate input
+    const { error } = forgotPasswordSchema.validate(req.body)
+    if (error) {
+      return res.status(400).json({ message: error.details[0].message })
+    }
+
+    const { email, newPassword } = req.body
+
+    // Find user by email
+    const user = await User.findOne({ email })
+    if (!user) {
+      return res
+        .status(400)
+        .json({ message: "No user found with this email address" })
+    }
+
+    // Update password
+    user.password = newPassword
+    await user.save()
+
+    res.json({
+      message: "Password updated successfully",
+    })
+  } catch (error) {
+    console.error("Forgot password error:", error)
+    res.status(500).json({ message: "Server error" })
+  }
+}
+
 module.exports = {
   register,
   login,
+  forgotPassword,
 }

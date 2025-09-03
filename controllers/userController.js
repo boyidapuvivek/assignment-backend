@@ -12,10 +12,35 @@ const updateProfileSchema = Joi.object({
   businessName: Joi.string().allow(""),
 })
 
+// Helper function to safely delete image from cloudinary
+const safeDeleteImage = async (imageObj) => {
+  if (imageObj && imageObj.public_id) {
+    try {
+      await deleteFromCloudinary(imageObj.public_id)
+    } catch (error) {
+      console.error("Error deleting image from cloudinary:", error)
+    }
+  }
+}
+
 // Get user profile
 const getProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select("-password")
+
+    if (user) {
+      // Ensure image objects exist
+      user.avatar = user.avatar || null
+      user.coverImage = user.coverImage || null
+
+      console.log("User profile retrieved:", {
+        id: user._id,
+        username: user.username,
+        avatar: user.avatar,
+        coverImage: user.coverImage,
+      })
+    }
+
     res.json(user)
   } catch (error) {
     console.error("Get profile error:", error)
@@ -59,11 +84,9 @@ const updateProfile = async (req, res) => {
     }
 
     // Handle avatar upload
-    if (req.files && req.files.avatar) {
+    if (req.files && req.files.avatar && req.files.avatar[0]) {
       // Delete old avatar if exists
-      if (currentUser.avatar.public_id) {
-        await deleteFromCloudinary(currentUser.avatar.public_id)
-      }
+      await safeDeleteImage(currentUser.avatar)
 
       updateData.avatar = {
         url: req.files.avatar[0].path,
@@ -72,11 +95,9 @@ const updateProfile = async (req, res) => {
     }
 
     // Handle cover image upload
-    if (req.files && req.files.coverImage) {
+    if (req.files && req.files.coverImage && req.files.coverImage[0]) {
       // Delete old cover image if exists
-      if (currentUser.coverImage.public_id) {
-        await deleteFromCloudinary(currentUser.coverImage.public_id)
-      }
+      await safeDeleteImage(currentUser.coverImage)
 
       updateData.coverImage = {
         url: req.files.coverImage[0].path,
@@ -90,6 +111,13 @@ const updateProfile = async (req, res) => {
     const user = await User.findByIdAndUpdate(req.user.id, updateData, {
       new: true,
     }).select("-password")
+
+    console.log("Updated user:", {
+      id: user._id,
+      username: user.username,
+      avatar: user.avatar,
+      coverImage: user.coverImage,
+    })
 
     res.json({
       message: "Profile updated successfully",

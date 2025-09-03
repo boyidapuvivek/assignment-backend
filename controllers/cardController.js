@@ -14,11 +14,11 @@ const generateRandomPassword = (length = 12) => {
   return password
 }
 
-// Validation schema for creating team/business cards (password is now optional)
+// Validation schemas
 const createCardSchema = Joi.object({
   username: Joi.string().min(3).max(30).required(),
   email: Joi.string().email().required(),
-  password: Joi.string().min(6).optional(), // Made optional since it will be auto-generated
+  password: Joi.string().min(6).optional(),
   cardType: Joi.string().valid("team", "business").required(),
   phoneNumber: Joi.string().allow(""),
   businessEmail: Joi.string().email().allow(""),
@@ -28,7 +28,6 @@ const createCardSchema = Joi.object({
   businessName: Joi.string().allow(""),
 })
 
-// Validation schema for updating cards
 const updateCardSchema = Joi.object({
   phoneNumber: Joi.string().allow(""),
   businessEmail: Joi.string().email().allow(""),
@@ -38,10 +37,28 @@ const updateCardSchema = Joi.object({
   businessName: Joi.string().allow(""),
 })
 
+// Helper function to safely delete image from cloudinary
+const safeDeleteImage = async (imageObj) => {
+  if (imageObj && imageObj.public_id) {
+    try {
+      await deleteFromCloudinary(imageObj.public_id)
+    } catch (error) {
+      console.error("Error deleting image from cloudinary:", error)
+    }
+  }
+}
+
 // Get my card
 const getMyCard = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select("-password")
+
+    // Ensure image objects exist
+    if (user) {
+      user.avatar = user.avatar || null
+      user.coverImage = user.coverImage || null
+    }
+
     res.json(user)
   } catch (error) {
     console.error("Get my card error:", error)
@@ -56,7 +73,15 @@ const getTeamCards = async (req, res) => {
       ownerId: req.user.id,
       userType: "team",
     }).select("-password")
-    res.json(teamCards)
+
+    // Ensure image objects exist for all cards
+    const processedCards = teamCards.map((card) => ({
+      ...card.toObject(),
+      avatar: card.avatar || null,
+      coverImage: card.coverImage || null,
+    }))
+
+    res.json(processedCards)
   } catch (error) {
     console.error("Get team cards error:", error)
     res.status(500).json({ message: "Server error" })
@@ -70,7 +95,15 @@ const getBusinessCards = async (req, res) => {
       ownerId: req.user.id,
       userType: "business",
     }).select("-password")
-    res.json(businessCards)
+
+    // Ensure image objects exist for all cards
+    const processedCards = businessCards.map((card) => ({
+      ...card.toObject(),
+      avatar: card.avatar || null,
+      coverImage: card.coverImage || null,
+    }))
+
+    res.json(processedCards)
   } catch (error) {
     console.error("Get business cards error:", error)
     res.status(500).json({ message: "Server error" })
@@ -130,10 +163,12 @@ const createTeamCard = async (req, res) => {
       ownerId: req.user.id,
       userType: "team",
       isProfileComplete: true,
+      avatar: null,
+      coverImage: null,
     }
 
     // Handle avatar upload
-    if (req.files && req.files.avatar) {
+    if (req.files && req.files.avatar && req.files.avatar[0]) {
       teamMemberData.avatar = {
         url: req.files.avatar[0].path,
         public_id: req.files.avatar[0].filename,
@@ -141,12 +176,14 @@ const createTeamCard = async (req, res) => {
     }
 
     // Handle cover image upload
-    if (req.files && req.files.coverImage) {
+    if (req.files && req.files.coverImage && req.files.coverImage[0]) {
       teamMemberData.coverImage = {
         url: req.files.coverImage[0].path,
         public_id: req.files.coverImage[0].filename,
       }
     }
+
+    console.log("Creating team member with data:", teamMemberData)
 
     // Create team member
     const teamMember = new User(teamMemberData)
@@ -167,8 +204,10 @@ const createTeamCard = async (req, res) => {
       coverImage: teamMember.coverImage,
       userType: teamMember.userType,
       createdAt: teamMember.createdAt,
-      generatedPassword: password, // Include generated password in response for reference
+      generatedPassword: password,
     }
+
+    console.log("Team member created successfully:", responseData)
 
     res.status(201).json({
       message: "Team member created successfully",
@@ -233,10 +272,12 @@ const createBusinessCard = async (req, res) => {
       ownerId: req.user.id,
       userType: "business",
       isProfileComplete: true,
+      avatar: null,
+      coverImage: null,
     }
 
     // Handle avatar upload
-    if (req.files && req.files.avatar) {
+    if (req.files && req.files.avatar && req.files.avatar[0]) {
       businessUserData.avatar = {
         url: req.files.avatar[0].path,
         public_id: req.files.avatar[0].filename,
@@ -244,12 +285,14 @@ const createBusinessCard = async (req, res) => {
     }
 
     // Handle cover image upload
-    if (req.files && req.files.coverImage) {
+    if (req.files && req.files.coverImage && req.files.coverImage[0]) {
       businessUserData.coverImage = {
         url: req.files.coverImage[0].path,
         public_id: req.files.coverImage[0].filename,
       }
     }
+
+    console.log("Creating business user with data:", businessUserData)
 
     // Create business user
     const businessUser = new User(businessUserData)
@@ -270,8 +313,10 @@ const createBusinessCard = async (req, res) => {
       coverImage: businessUser.coverImage,
       userType: businessUser.userType,
       createdAt: businessUser.createdAt,
-      generatedPassword: password, // Include generated password in response for reference
+      generatedPassword: password,
     }
+
+    console.log("Business user created successfully:", responseData)
 
     res.status(201).json({
       message: "Business card created successfully",
@@ -309,11 +354,9 @@ const updateTeamCard = async (req, res) => {
     const updateData = { ...req.body, isProfileComplete: true }
 
     // Handle avatar upload
-    if (req.files && req.files.avatar) {
+    if (req.files && req.files.avatar && req.files.avatar[0]) {
       // Delete old avatar if exists
-      if (card.avatar.public_id) {
-        await deleteFromCloudinary(card.avatar.public_id)
-      }
+      await safeDeleteImage(card.avatar)
 
       updateData.avatar = {
         url: req.files.avatar[0].path,
@@ -322,11 +365,9 @@ const updateTeamCard = async (req, res) => {
     }
 
     // Handle cover image upload
-    if (req.files && req.files.coverImage) {
+    if (req.files && req.files.coverImage && req.files.coverImage[0]) {
       // Delete old cover image if exists
-      if (card.coverImage.public_id) {
-        await deleteFromCloudinary(card.coverImage.public_id)
-      }
+      await safeDeleteImage(card.coverImage)
 
       updateData.coverImage = {
         url: req.files.coverImage[0].path,
@@ -375,11 +416,9 @@ const updateBusinessCard = async (req, res) => {
     const updateData = { ...req.body, isProfileComplete: true }
 
     // Handle avatar upload
-    if (req.files && req.files.avatar) {
+    if (req.files && req.files.avatar && req.files.avatar[0]) {
       // Delete old avatar if exists
-      if (card.avatar.public_id) {
-        await deleteFromCloudinary(card.avatar.public_id)
-      }
+      await safeDeleteImage(card.avatar)
 
       updateData.avatar = {
         url: req.files.avatar[0].path,
@@ -388,11 +427,9 @@ const updateBusinessCard = async (req, res) => {
     }
 
     // Handle cover image upload
-    if (req.files && req.files.coverImage) {
+    if (req.files && req.files.coverImage && req.files.coverImage[0]) {
       // Delete old cover image if exists
-      if (card.coverImage.public_id) {
-        await deleteFromCloudinary(card.coverImage.public_id)
-      }
+      await safeDeleteImage(card.coverImage)
 
       updateData.coverImage = {
         url: req.files.coverImage[0].path,
@@ -419,7 +456,6 @@ const updateBusinessCard = async (req, res) => {
 const deleteTeamCard = async (req, res) => {
   try {
     const { id } = req.params
-
     const card = await User.findOne({
       _id: id,
       ownerId: req.user.id,
@@ -431,13 +467,8 @@ const deleteTeamCard = async (req, res) => {
     }
 
     // Delete images from Cloudinary
-    if (card.avatar.public_id) {
-      await deleteFromCloudinary(card.avatar.public_id)
-    }
-
-    if (card.coverImage.public_id) {
-      await deleteFromCloudinary(card.coverImage.public_id)
-    }
+    await safeDeleteImage(card.avatar)
+    await safeDeleteImage(card.coverImage)
 
     // Delete the card
     await User.findByIdAndDelete(id)
@@ -453,7 +484,6 @@ const deleteTeamCard = async (req, res) => {
 const deleteBusinessCard = async (req, res) => {
   try {
     const { id } = req.params
-
     const card = await User.findOne({
       _id: id,
       ownerId: req.user.id,
@@ -465,13 +495,8 @@ const deleteBusinessCard = async (req, res) => {
     }
 
     // Delete images from Cloudinary
-    if (card.avatar.public_id) {
-      await deleteFromCloudinary(card.avatar.public_id)
-    }
-
-    if (card.coverImage.public_id) {
-      await deleteFromCloudinary(card.coverImage.public_id)
-    }
+    await safeDeleteImage(card.avatar)
+    await safeDeleteImage(card.coverImage)
 
     // Delete the card
     await User.findByIdAndDelete(id)
