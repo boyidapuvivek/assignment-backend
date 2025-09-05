@@ -26,6 +26,37 @@ const createCardSchema = Joi.object({
   businessDescription: Joi.string().max(200).allow(""),
   location: Joi.string().allow(""),
   businessName: Joi.string().allow(""),
+  // New validation for added fields
+  socialMediaLinks: Joi.object({
+    facebook: Joi.string().allow(""),
+    twitter: Joi.string().allow(""),
+    linkedIn: Joi.string().allow(""),
+    instagram: Joi.string().allow(""),
+  }).optional(),
+  services: Joi.array()
+    .items(
+      Joi.object({
+        name: Joi.string().required(),
+        price: Joi.number().min(0).required(),
+      })
+    )
+    .optional(),
+  products: Joi.array()
+    .items(
+      Joi.object({
+        name: Joi.string().required(),
+        price: Joi.number().min(0).required(),
+      })
+    )
+    .optional(),
+  gallery: Joi.array()
+    .items(
+      Joi.object({
+        url: Joi.string().required(),
+        public_id: Joi.string().required(),
+      })
+    )
+    .optional(),
 })
 
 const updateCardSchema = Joi.object({
@@ -232,6 +263,7 @@ const createBusinessCard = async (req, res) => {
       ...req.body,
       cardType: "business",
     })
+
     if (error) {
       return res.status(400).json({ message: error.details[0].message })
     }
@@ -246,19 +278,24 @@ const createBusinessCard = async (req, res) => {
       businessDescription,
       location,
       businessName,
+      socialMediaLinks,
+      services,
+      products,
+      gallery,
     } = req.body
 
     // Check if user already exists
     const existingUser = await User.findOne({
       $or: [{ email }, { username }],
     })
+
     if (existingUser) {
       return res.status(400).json({
         message: "User already exists with this email or username",
       })
     }
 
-    // Prepare business user data
+    // Prepare business user data with all fields
     const businessUserData = {
       username,
       email,
@@ -269,6 +306,16 @@ const createBusinessCard = async (req, res) => {
       businessDescription,
       location,
       businessName,
+      // Initialize new fields with defaults
+      socialMediaLinks: socialMediaLinks || {
+        facebook: "",
+        twitter: "",
+        linkedIn: "",
+        instagram: "",
+      },
+      services: services || [],
+      products: products || [],
+      gallery: gallery || [],
       ownerId: req.user.id,
       userType: "business",
       isProfileComplete: true,
@@ -292,13 +339,25 @@ const createBusinessCard = async (req, res) => {
       }
     }
 
+    // Handle gallery images upload
+    if (req.files && req.files.gallery) {
+      const galleryImages = req.files.gallery.map((file) => ({
+        url: file.path,
+        public_id: file.filename,
+      }))
+      businessUserData.gallery = [
+        ...(businessUserData.gallery || []),
+        ...galleryImages,
+      ]
+    }
+
     console.log("Creating business user with data:", businessUserData)
 
     // Create business user
     const businessUser = new User(businessUserData)
     await businessUser.save()
 
-    // Return response without password
+    // Return response without password but with all new fields
     const responseData = {
       id: businessUser._id,
       username: businessUser.username,
@@ -309,6 +368,10 @@ const createBusinessCard = async (req, res) => {
       businessDescription: businessUser.businessDescription,
       location: businessUser.location,
       businessName: businessUser.businessName,
+      socialMediaLinks: businessUser.socialMediaLinks,
+      services: businessUser.services,
+      products: businessUser.products,
+      gallery: businessUser.gallery,
       avatar: businessUser.avatar,
       coverImage: businessUser.coverImage,
       userType: businessUser.userType,

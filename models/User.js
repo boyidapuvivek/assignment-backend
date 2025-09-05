@@ -83,10 +83,73 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // NEW FIELDS ADDED BELOW
+    socialMediaLinks: {
+      facebook: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+      twitter: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+      linkedIn: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+      instagram: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+    },
+    services: [
+      {
+        name: {
+          type: String,
+          trim: true,
+          required: true,
+        },
+        price: {
+          type: Number,
+          required: true,
+          min: 0,
+        },
+      },
+    ],
+    products: [
+      {
+        name: {
+          type: String,
+          trim: true,
+          required: true,
+        },
+        price: {
+          type: Number,
+          required: true,
+          min: 0,
+        },
+      },
+    ],
+    gallery: [
+      {
+        url: {
+          type: String,
+          required: true,
+          trim: true,
+        },
+        public_id: {
+          type: String,
+          required: true,
+          trim: true,
+        },
+      },
+    ],
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 )
 
 // Hash password before saving
